@@ -1,13 +1,25 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { generateWallpapers } from './services/geminiService';
+import { getApiKey } from './services/apiKeyService';
 import Spinner from './components/Spinner';
 import ImageModal from './components/ImageModal';
+import ApiKeyManager from './components/ApiKeyManager';
 
-// --- Helper Components (Defined outside App to prevent re-creation on re-renders) ---
+// --- Helper Components ---
 
-const Header: React.FC = () => (
-    <header className="text-center p-4 pt-6">
+const SettingsIcon: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <svg onClick={onClick} xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer text-gray-400 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+const Header: React.FC<{ onSettingsClick: () => void }> = ({ onSettingsClick }) => (
+    <header className="text-center p-4 pt-6 relative">
+        <div className="absolute top-6 right-6">
+            <SettingsIcon onClick={onSettingsClick} />
+        </div>
         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
           AI 배경화면 생성기
         </h1>
@@ -20,22 +32,29 @@ interface PromptFormProps {
     setPrompt: (value: string) => void;
     onGenerate: () => void;
     isLoading: boolean;
+    isKeySet: boolean;
+    onSettingsClick: () => void;
 }
 
-const PromptForm: React.FC<PromptFormProps> = ({ prompt, setPrompt, onGenerate, isLoading }) => (
+const PromptForm: React.FC<PromptFormProps> = ({ prompt, setPrompt, onGenerate, isLoading, isKeySet, onSettingsClick }) => (
     <div className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700">
+        {!isKeySet && (
+            <div className="max-w-xl mx-auto mb-2 text-center text-sm bg-yellow-900/50 border border-yellow-700 text-yellow-300 p-2 rounded-lg">
+                API 키가 설정되지 않았습니다. <button onClick={onSettingsClick} className="font-bold underline hover:text-white">여기</button>를 클릭하여 키를 설정해주세요.
+            </div>
+        )}
         <div className="max-w-xl mx-auto flex gap-2">
             <input
               type="text"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="예: 고요한 밤하늘의 은하수"
-              className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white transition-shadow"
-              disabled={isLoading}
+              className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white transition-shadow disabled:opacity-50"
+              disabled={isLoading || !isKeySet}
             />
             <button
               onClick={onGenerate}
-              disabled={isLoading}
+              disabled={isLoading || !isKeySet}
               className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors shadow-lg"
             >
               생성
@@ -80,8 +99,23 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isApiKeySet, setIsApiKeySet] = useState<boolean>(false);
+  const [isApiModalOpen, setIsApiModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkApiKey = async () => {
+      const key = await getApiKey();
+      setIsApiKeySet(!!key);
+    };
+    checkApiKey();
+  }, []);
 
   const executeGeneration = useCallback(async (generationPrompt: string) => {
+    if (!isApiKeySet) {
+      setError('API 키를 먼저 설정해주세요.');
+      setIsApiModalOpen(true);
+      return;
+    }
     if (!generationPrompt.trim()) {
       setError('배경화면으로 만들고 싶은 분위기를 입력해주세요.');
       return;
@@ -98,7 +132,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isApiKeySet]);
 
   const handleGenerate = useCallback(() => {
     executeGeneration(prompt);
@@ -112,11 +146,17 @@ const App: React.FC = () => {
     setSelectedImage(null);
   };
   
+  const handleKeySaved = () => {
+    setIsApiKeySet(true);
+    setIsApiModalOpen(false);
+    setError(null);
+  };
+  
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col font-sans">
-      <Header />
+      <Header onSettingsClick={() => setIsApiModalOpen(true)} />
       
-      <main className="flex-grow pb-28"> {/* Increased padding-bottom to avoid overlap with sticky form */}
+      <main className="flex-grow pb-28">
         {isLoading && <div className="mt-10"><Spinner /></div>}
         {error && <p className="text-red-500 text-center mt-4 p-4">{error}</p>}
         
@@ -130,12 +170,21 @@ const App: React.FC = () => {
         setPrompt={setPrompt}
         onGenerate={handleGenerate}
         isLoading={isLoading}
+        isKeySet={isApiKeySet}
+        onSettingsClick={() => setIsApiModalOpen(true)}
       />
 
       {selectedImage && (
         <ImageModal 
           imageUrl={selectedImage} 
           onClose={handleCloseModal}
+        />
+      )}
+      
+      {isApiModalOpen && (
+        <ApiKeyManager 
+            onClose={() => setIsApiModalOpen(false)}
+            onKeySaved={handleKeySaved}
         />
       )}
     </div>

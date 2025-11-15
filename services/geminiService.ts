@@ -1,11 +1,18 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
+import { getApiKey } from './apiKeyService';
 
-// Assume process.env.API_KEY is available in the environment
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const getAiClient = async (): Promise<GoogleGenAI> => {
+  const apiKey = await getApiKey();
+  if (!apiKey) {
+    throw new Error("API 키가 설정되지 않았습니다. 설정을 확인해주세요.");
+  }
+  return new GoogleGenAI({ apiKey });
+}
 
 export const generateWallpapers = async (prompt: string): Promise<string[]> => {
   try {
+    const ai = await getAiClient();
     const response = await ai.models.generateImages({
       model: 'imagen-4.0-generate-001',
       prompt: `A beautiful, high-resolution mobile phone wallpaper with a 9:16 aspect ratio. The theme is: ${prompt}`,
@@ -22,12 +29,13 @@ export const generateWallpapers = async (prompt: string): Promise<string[]> => {
     return [];
   } catch (error) {
     console.error("Error generating images:", error);
-    throw new Error("이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    throw new Error("이미지 생성에 실패했습니다. API 키가 유효한지 확인해주세요.");
   }
 };
 
 export const remixWallpaper = async (base64Image: string, prompt: string): Promise<string> => {
   try {
+    const ai = await getAiClient();
     const rawBase64 = base64Image.split(',')[1];
     if (!rawBase64) {
       throw new Error("Invalid image data format.");
@@ -65,6 +73,6 @@ export const remixWallpaper = async (base64Image: string, prompt: string): Promi
 
   } catch (error) {
     console.error("Error remixing image:", error);
-    throw new Error("이미지 리믹스에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    throw new Error("이미지 리믹스에 실패했습니다. API 키가 유효한지 확인해주세요.");
   }
 };
